@@ -25,7 +25,7 @@
   .header-divider { width:200px; height:1px; background:linear-gradient(90deg,transparent,var(--gold),transparent); margin:20px auto 0; }
 
   /* CONFIG BANNER */
-  #config-banner { background:#0d0b08; border-bottom:2px solid var(--gold-dim); padding:12px 24px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; position:relative; z-index:10; }
+  #config-banner { display:none; }
   #config-banner label { font-family:'Cinzel',serif; font-size:10px; letter-spacing:2px; color:var(--gold-dim); white-space:nowrap; margin:0; }
   #url-input { flex:1; min-width:240px; max-width:520px; background:var(--bg); border:1px solid var(--border); border-radius:3px; color:var(--text); padding:7px 11px; font-family:'Crimson Pro',serif; font-size:14px; }
   #url-input:focus { outline:none; border-color:var(--gold-dim); }
@@ -180,13 +180,7 @@
   <div class="header-divider"></div>
 </header>
 
-<!-- Config bar -->
-<div id="config-banner">
-  <label>URL Apps Script :</label>
-  <input type="text" id="url-input" placeholder="https://script.google.com/macros/s/…/exec">
-  <div class="status-dot" id="status-dot"></div>
-  <span id="status-text">En attente de l'URL</span>
-  <button class="btn btn-ghost btn-sm" onclick="connectSheet()">Connecter</button>
+  <span id="status-text"></span>
   <button class="btn btn-ghost btn-sm" onclick="refreshData()" title="Recharger les données">↺ Sync</button>
 </div>
 
@@ -259,16 +253,11 @@
 // ═══════════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════
-let SCRIPT_URL = localStorage.getItem('catan-url') || '';
+let SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzzoClck3rGq3voKsaeXeBT5mTa9wYuEP5R1tpS5p1unWzxqBipCgYE8CpDjpCtr94/exec';
 let db = { joueurs: [], parties: [] };
 let currentSemestre = 'all';
 
-window.addEventListener('DOMContentLoaded', () => {
-  if (SCRIPT_URL) {
-    document.getElementById('url-input').value = SCRIPT_URL;
-    refreshData();
-  }
-});
+window.addEventListener('DOMContentLoaded', () => { refreshData(); });
 
 // ═══════════════════════════════════════════════════
 //  API
