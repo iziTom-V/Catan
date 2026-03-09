@@ -107,7 +107,20 @@
 
   /* GAME FORM */
   .participants-section { border:1px solid var(--border); border-radius:4px; padding:20px; margin-top:12px; background:var(--bg); }
-  .participant-row { display:grid; grid-template-columns:1fr 140px 130px; gap:12px; align-items:center; margin-bottom:10px; }
+  /* PLAYER TOGGLE CHIPS */
+  .player-chips { display:flex; flex-wrap:wrap; gap:10px; margin-top:4px; }
+  .player-chip { display:flex; align-items:center; gap:8px; background:var(--bg); border:1px solid var(--border); border-radius:30px; padding:8px 16px; cursor:pointer; transition:all .2s; user-select:none; }
+  .player-chip:hover { border-color:var(--gold-dim); }
+  .player-chip.selected { background:var(--gold-dim); border-color:var(--gold); color:var(--cream); }
+  .chip-avatar { width:28px; height:28px; border-radius:50%; background:var(--border); display:flex; align-items:center; justify-content:center; font-family:'Cinzel',serif; font-size:11px; font-weight:700; color:var(--bg); flex-shrink:0; }
+  .player-chip.selected .chip-avatar { background:var(--gold-light); }
+  .chip-name { font-family:'Cinzel',serif; font-size:12px; letter-spacing:1px; }
+  /* SCORE ROWS */
+  .participant-row { display:grid; grid-template-columns:1fr 160px; gap:16px; align-items:center; margin-bottom:10px; }
+  .score-input-wrap { position:relative; }
+  .score-input-wrap input { text-align:center; padding-right:36px; }
+  .winner-auto-badge { position:absolute; right:10px; top:50%; transform:translateY(-50%); font-size:16px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  .winner-auto-badge.show { opacity:1; }
 
   /* GAME LIST */
   .game-card { background:var(--surface); border:1px solid var(--border); border-radius:4px; overflow:hidden; margin-bottom:16px; transition:border-color .2s; }
@@ -216,11 +229,12 @@
         <div class="form-group"><label>Date</label><input type="date" id="p-date"></div>
       </div>
       <div class="form-group">
-        <label>Participants (3 à 6) — Ctrl/Cmd pour sélection multiple</label>
-        <select id="p-select-joueurs" multiple onchange="updateParticipants()"></select>
+        <label>Participants (3 à 6) — cliquez pour sélectionner</label>
+        <div class="player-chips" id="player-chips"></div>
+        <div style="margin-top:8px;font-size:12px;color:var(--text-dim);font-style:italic" id="chips-count"></div>
       </div>
       <div id="participants-form" class="participants-section" style="display:none">
-        <div style="font-family:'Cinzel',serif;font-size:11px;letter-spacing:2px;color:var(--gold-dim);margin-bottom:14px">SCORES & GAGNANT</div>
+        <div style="font-family:'Cinzel',serif;font-size:11px;letter-spacing:2px;color:var(--gold-dim);margin-bottom:14px">SCORES — Le vainqueur est celui qui atteint 10 points ♛</div>
         <div id="participant-rows"></div>
       </div>
       <div style="margin-top:24px">
@@ -457,60 +471,106 @@ function renderJoueurs() {
 // ═══════════════════════════════════════════════════
 //  NOUVELLE PARTIE
 // ═══════════════════════════════════════════════════
+// Joueurs sélectionnés via chips
+let selectedJoueurs = [];
+
 function refreshJoueursSelect() {
-  const sel = document.getElementById('p-select-joueurs');
-  sel.innerHTML = [...db.joueurs].sort((a,b)=>a.nom.localeCompare(b.nom))
-    .map(j=>`<option value="${j.id}">${j.prenom} ${j.nom}</option>`).join('');
+  selectedJoueurs = [];
   document.getElementById('participants-form').style.display='none';
+  renderChips();
+}
+
+function renderChips() {
+  const sorted = [...db.joueurs].sort((a,b)=>a.nom.localeCompare(b.nom));
+  const container = document.getElementById('player-chips');
+  if(!container) return;
+  container.innerHTML = sorted.map(j => {
+    const sel = selectedJoueurs.includes(j.id);
+    return `<div class="player-chip ${sel?'selected':''}" onclick="toggleChip(${j.id})">
+      <div class="chip-avatar">${j.prenom[0].toUpperCase()}${j.nom[0].toUpperCase()}</div>
+      <span class="chip-name">${j.prenom} ${j.nom}</span>
+    </div>`;
+  }).join('');
+  const count = selectedJoueurs.length;
+  const countEl = document.getElementById('chips-count');
+  if(count===0) countEl.textContent = '';
+  else if(count<3) countEl.textContent = `${count} sélectionné(s) — il en faut au moins 3`;
+  else countEl.textContent = `${count} joueur(s) sélectionné(s) ✓`;
+  updateParticipants();
+}
+
+function toggleChip(id) {
+  if(selectedJoueurs.includes(id)) {
+    selectedJoueurs = selectedJoueurs.filter(x=>x!==id);
+  } else {
+    if(selectedJoueurs.length>=6) { toast('Maximum 6 participants',true); return; }
+    selectedJoueurs.push(id);
+  }
+  renderChips();
 }
 
 function updateParticipants() {
-  const sel = document.getElementById('p-select-joueurs');
-  const selected = [...sel.selectedOptions].map(o=>+o.value);
-  if(!selected.length) { document.getElementById('participants-form').style.display='none'; return; }
-  if(selected.length>6) { toast('Maximum 6 participants',true); return; }
-  document.getElementById('participants-form').style.display='block';
-  document.getElementById('participant-rows').innerHTML = selected.map(id=>{
+  const form = document.getElementById('participants-form');
+  if(selectedJoueurs.length < 2) { form.style.display='none'; return; }
+  form.style.display='block';
+  // Keep existing scores when re-rendering
+  const prevScores = {};
+  selectedJoueurs.forEach(id => {
+    const el = document.getElementById('score-'+id);
+    if(el) prevScores[id] = el.value;
+  });
+  document.getElementById('participant-rows').innerHTML = selectedJoueurs.map(id=>{
     const j = db.joueurs.find(j=>j.id===id);
+    const prev = prevScores[id] || '';
+    const isWinner = +prev >= 10;
     return `<div class="participant-row">
-      <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--cream)">${j.prenom} ${j.nom}</div>
-      <input type="number" id="score-${id}" placeholder="Points (2–10)" min="2" max="10" style="text-align:center">
-      <div style="display:flex;align-items:center;gap:8px">
-        <input type="radio" name="gagnant" value="${id}" id="win-${id}" style="width:auto;accent-color:var(--gold)">
-        <label for="win-${id}" style="font-size:13px;color:var(--text-dim);font-family:'Crimson Pro',serif;text-transform:none;letter-spacing:0;margin:0;cursor:pointer">Gagnant ♛</label>
+      <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--cream);display:flex;align-items:center;gap:10px">
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--gold-dim);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--bg);border:1px solid var(--gold);flex-shrink:0">${j.prenom[0].toUpperCase()}${j.nom[0].toUpperCase()}</div>
+        ${j.prenom} ${j.nom}
+        <span id="winner-badge-${id}" style="font-size:13px;margin-left:4px;transition:opacity .2s;opacity:${isWinner?1:0}">♛</span>
+      </div>
+      <div class="score-input-wrap">
+        <input type="number" id="score-${id}" value="${prev}" placeholder="pts" min="2" max="11"
+          style="text-align:center" oninput="onScoreChange(${id}, this.value)">
       </div>
     </div>`;
   }).join('');
+}
+
+function onScoreChange(id, val) {
+  // Highlight winner badge if score = 10
+  const badge = document.getElementById('winner-badge-'+id);
+  if(badge) badge.style.opacity = (+val >= 10) ? '1' : '0';
 }
 
 async function enregistrerPartie() {
   if(!SCRIPT_URL) { toast('Connectez d\'abord un Google Sheet',true); return; }
   const nom = document.getElementById('p-nom').value.trim();
   const date = document.getElementById('p-date').value;
-  if(!nom) { toast('Donnez un nom à la partie',true); return; }
+  if(!nom) { toast('Donnez un nom \u00e0 la partie',true); return; }
   if(!date) { toast('Choisissez une date',true); return; }
-  const sel = document.getElementById('p-select-joueurs');
-  const selected = [...sel.selectedOptions].map(o=>+o.value);
-  if(selected.length<3) { toast('Il faut au moins 3 joueurs',true); return; }
-  if(selected.length>6) { toast('Maximum 6 joueurs',true); return; }
-  const radio = document.querySelector('input[name="gagnant"]:checked');
-  if(!radio) { toast('Désignez un gagnant',true); return; }
-  const gagnant = +radio.value;
+  if(selectedJoueurs.length<3) { toast('Il faut au moins 3 joueurs',true); return; }
+  if(selectedJoueurs.length>6) { toast('Maximum 6 joueurs',true); return; }
   const participants = [];
-  for(const id of selected) {
+  for(const id of selectedJoueurs) {
     const score = +document.getElementById('score-'+id)?.value;
-    if(!score||score<2||score>10) { toast('Scores entre 2 et 10 points',true); return; }
+    if(!score||score<2||score>11) { toast('Scores entre 2 et 11 points',true); return; }
     participants.push({ id, score });
   }
+  const winners = participants.filter(p=>p.score>=10);
+  if(winners.length===0) { toast('Personne n\'a 10 ou 11 points — le vainqueur doit avoir 10 ou 11 pts',true); return; }
+  if(winners.length>1) { toast('Plusieurs joueurs ont 10 points — un seul peut gagner',true); return; }
+  const gagnant = winners[0].id;
   const btn = document.getElementById('btn-add-partie');
-  btn.disabled=true; showLoad('Enregistrement…');
+  btn.disabled=true; showLoad('Enregistrement\u2026');
   try {
     const res = await api({ action:'addPartie', nom, date, gagnant, participants });
     db.parties.push({ id:+res.data.id, nom, date, gagnant, participants });
-    toast('Partie enregistrée !');
+    toast('Partie enregistr\u00e9e !');
     document.getElementById('p-nom').value='';
     document.getElementById('p-date').value='';
-    sel.selectedIndex=-1;
+    selectedJoueurs = [];
+    renderChips();
     document.getElementById('participants-form').style.display='none';
   } catch(e) { toast('Erreur : '+e.message,true); }
   finally { btn.disabled=false; hideLoad(); }
